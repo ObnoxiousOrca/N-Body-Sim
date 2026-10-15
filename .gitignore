@@ -1,0 +1,22 @@
+# Compiled executables and binaries
+nbody
+*.out
+*.exe
+*.bin
+*.app
+
+# Object and library files
+*.o
+*.obj
+*.a
+*.so
+*.so.*
+*.dll
+*.dylib
+
+# Debug symbols
+*.debug
+*.dSYM/
+
+#vscode config
+.vscode
