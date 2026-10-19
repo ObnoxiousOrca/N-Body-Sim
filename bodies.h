@@ -2,7 +2,7 @@
 #ifndef BODIES_H
 #define BODIES_H
 
-#define ASTEROID_COUNT 500
+#define ASTEROID_COUNT 10000
 #define SATELLITE_COUNT 13
 #define PLANET_COUNT 8
 

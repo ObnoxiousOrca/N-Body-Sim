@@ -9,14 +9,12 @@
 #define AU 1.495978707e11
 #define PI 3.14159265358979323846
 
-/* Planet indices */
 enum {
     SUN = 0,
     MERCURY, VENUS, EARTH, MARS,
     JUPITER, SATURN, URANUS, NEPTUNE
 };
 
-/* Circular-orbit approximation for initial conditions */
 typedef struct {
     double mass;
     double a;       /* Semi-major axis in metres */
