@@ -37,6 +37,9 @@ struct Renderer {
     LaunchRequest pendingRequest;
 
     std::vector<int> radiusOverrides;
+
+    bool toggleRequested;   // set by the mode button / M key
+    HudStats hud;           // latest stats for the HUD
 };
 
 Renderer* renderer_create(int width, int height) {
@@ -63,7 +66,9 @@ Renderer* renderer_create(int width, int height) {
             "4"       // Radius in pixels
         },
         {0.0, 0.0, 0.0, 0.0, 0.0, 4},
-        {}
+        {},
+        false,
+        {true, -1.0, -1.0, 0.0, 0}
     };
 
     r->window = SDL_CreateWindow(
@@ -101,6 +106,16 @@ Renderer* renderer_create(int width, int height) {
     r->zoom = 12.0;
 
     return r;
+}
+
+// Clickable CPU/GPU mode button, top-right corner.
+static SDL_Rect modeButtonRect(const Renderer* r) {
+    return SDL_Rect{r->width - 265, 15, 250, 36};
+}
+
+static bool pointInRect(int px, int py, const SDL_Rect& rc) {
+    return px >= rc.x && px < rc.x + rc.w &&
+           py >= rc.y && py < rc.y + rc.h;
 }
 
 static void drawText(Renderer* r, const char* text, int x, int y, SDL_Color color) {
@@ -141,6 +156,11 @@ bool renderer_poll_events(Renderer* r) {
                 } else {
                     return false;
                 }
+                continue;
+            }
+
+            if (key == SDLK_m && !r->launchMode) {
+                r->toggleRequested = true;
                 continue;
             }
 
@@ -236,6 +256,14 @@ bool renderer_poll_events(Renderer* r) {
             int mx = event.button.x;
             int my = event.button.y;
 
+            // The mode button works at any time and must not also
+            // be treated as "pick a launch position".
+            SDL_Rect modeBtn = modeButtonRect(r);
+            if (pointInRect(mx, my, modeBtn)) {
+                r->toggleRequested = true;
+                continue;
+            }
+
             if (r->launchMode) {
                 // Launch panel occupies this rectangle.
                 bool inPanel =
@@ -281,6 +309,63 @@ bool renderer_poll_events(Renderer* r) {
     return true;
 }
 
+
+static void drawHud(Renderer* r) {
+    const HudStats& h = r->hud;
+
+    SDL_Color white  = {240, 240, 255, 255};
+    SDL_Color grey   = {140, 145, 175, 255};
+    SDL_Color gold   = {255, 215, 90, 255};
+
+    // --- Mode button ---
+    SDL_Rect btn = modeButtonRect(r);
+
+    if (h.gpuMode)
+        SDL_SetRenderDrawColor(r->canvas, 25, 110, 70, 255);
+    else
+        SDL_SetRenderDrawColor(r->canvas, 140, 80, 20, 255);
+    SDL_RenderFillRect(r->canvas, &btn);
+
+    SDL_SetRenderDrawColor(r->canvas, 230, 230, 255, 255);
+    SDL_RenderDrawRect(r->canvas, &btn);
+
+    drawText(r,
+             h.gpuMode ? "GPU - parallel   [M]"
+                       : "CPU - sequential [M]",
+             btn.x + 12, btn.y + 8, white);
+
+    // --- Stats panel ---
+    SDL_Rect panel = {btn.x, btn.y + btn.h + 6, btn.w, 100};
+    SDL_SetRenderDrawColor(r->canvas, 28, 30, 52, 245);
+    SDL_RenderFillRect(r->canvas, &panel);
+    SDL_SetRenderDrawColor(r->canvas, 150, 130, 255, 255);
+    SDL_RenderDrawRect(r->canvas, &panel);
+
+    int px = panel.x + 12;
+    int py = panel.y + 8;
+    char line[96];
+
+    if (h.cpuMs > 0.0)
+        snprintf(line, sizeof(line), "CPU: %8.2f ms/step", h.cpuMs);
+    else
+        snprintf(line, sizeof(line), "CPU: --");
+    drawText(r, line, px, py, h.gpuMode ? grey : white);
+
+    if (h.gpuMs > 0.0)
+        snprintf(line, sizeof(line), "GPU: %8.2f ms/step", h.gpuMs);
+    else
+        snprintf(line, sizeof(line), "GPU: --");
+    drawText(r, line, px, py + 22, h.gpuMode ? white : grey);
+
+    if (h.cpuMs > 0.0 && h.gpuMs > 0.0)
+        snprintf(line, sizeof(line), "Speedup: %.1fx", h.cpuMs / h.gpuMs);
+    else
+        snprintf(line, sizeof(line), "Speedup: -- (needs both)");
+    drawText(r, line, px, py + 44, gold);
+
+    snprintf(line, sizeof(line), "FPS: %.1f   Bodies: %d", h.fps, h.bodies);
+    drawText(r, line, px, py + 70, grey);
+}
 
 void renderer_draw(Renderer* r, const double* x, const double* y, const double* mass, int n) {
     SDL_SetRenderDrawColor(r->canvas, 15, 18, 35, 255);
@@ -357,6 +442,8 @@ void renderer_draw(Renderer* r, const double* x, const double* y, const double* 
         }
     }
 
+    drawHud(r);
+
     if (r->launchMode) {
         SDL_Rect panel = {20, 20, 350, 250};
 
@@ -411,6 +498,19 @@ void renderer_draw(Renderer* r, const double* x, const double* y, const double* 
     }
 
     SDL_RenderPresent(r->canvas);
+}
+
+bool renderer_take_mode_toggle(Renderer* r) {
+    if (!r || !r->toggleRequested)
+        return false;
+
+    r->toggleRequested = false;
+    return true;
+}
+
+void renderer_set_hud(Renderer* r, const HudStats* stats) {
+    if (r && stats)
+        r->hud = *stats;
 }
 
 bool renderer_take_launch_request(Renderer* r, LaunchRequest* request) {
